@@ -384,21 +384,16 @@ int main(int argc, const char** argv) {
     cl::ParseCommandLineOptions(argc, argv, "Delta compiler\n");
     addPlatformDefines();
 
-    try {
-        if (!inputs.empty()) {
-            return buildExecutable(inputs, nullptr, argv[0], ".", "");
-        } else if (build || run) {
-            llvm::SmallString<128> currentPath;
-            if (auto error = llvm::sys::fs::current_path(currentPath)) {
-                ABORT(error.message());
-            }
-            return buildPackage(currentPath, argv[0]);
-        } else {
-            cl::PrintHelpMessage();
-            return 0;
+    if (!inputs.empty()) {
+        return buildExecutable(inputs, nullptr, argv[0], ".", "");
+    } else if (build || run) {
+        llvm::SmallString<128> currentPath;
+        if (auto error = llvm::sys::fs::current_path(currentPath)) {
+            ABORT(error.message());
         }
-    } catch (const CompileError& error) {
-        error.print();
-        return 1;
+        return buildPackage(currentPath, argv[0]);
+    } else {
+        cl::PrintHelpMessage();
+        return 0;
     }
 }

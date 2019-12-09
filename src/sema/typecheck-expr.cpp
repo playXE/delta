@@ -61,25 +61,26 @@ void Typechecker::checkLambdaCapture(const VariableDecl& variableDecl, const Var
 }
 
 Type Typechecker::typecheckVarExpr(VarExpr& expr, bool useIsWriteOnly) {
-    auto& decl = findDecl(expr.getIdentifier(), expr.getLocation());
-    checkHasAccess(decl, expr.getLocation(), AccessLevel::None);
-    decl.setReferenced(true);
-    expr.setDecl(&decl);
+    auto* decl = findDecl(expr.getIdentifier(), expr.getLocation());
+    if (!decl) return Type();
+    checkHasAccess(*decl, expr.getLocation(), AccessLevel::None);
+    decl->setReferenced(true);
+    expr.setDecl(decl);
 
-    if (auto variableDecl = llvm::dyn_cast<VariableDecl>(&decl)) {
+    if (auto variableDecl = llvm::dyn_cast<VariableDecl>(decl)) {
         checkLambdaCapture(*variableDecl, expr);
     }
 
-    switch (decl.getKind()) {
+    switch (decl->getKind()) {
         case DeclKind::VarDecl:
-            if (!useIsWriteOnly) checkNotMoved(decl, expr);
-            return llvm::cast<VarDecl>(decl).getType();
+            if (!useIsWriteOnly) checkNotMoved(*decl, expr);
+            return llvm::cast<VarDecl>(decl)->getType();
         case DeclKind::ParamDecl:
-            if (!useIsWriteOnly) checkNotMoved(decl, expr);
-            return llvm::cast<ParamDecl>(decl).getType();
+            if (!useIsWriteOnly) checkNotMoved(*decl, expr);
+            return llvm::cast<ParamDecl>(decl)->getType();
         case DeclKind::FunctionDecl:
         case DeclKind::MethodDecl:
-            return Type(llvm::cast<FunctionDecl>(decl).getFunctionType(), Mutability::Mutable, SourceLocation());
+            return Type(llvm::cast<FunctionDecl>(decl)->getFunctionType(), Mutability::Mutable, SourceLocation());
         case DeclKind::GenericParamDecl:
             llvm_unreachable("cannot refer to generic parameters yet");
         case DeclKind::InitDecl:
@@ -95,9 +96,9 @@ Type Typechecker::typecheckVarExpr(VarExpr& expr, bool useIsWriteOnly) {
         case DeclKind::EnumDecl:
             ERROR(expr.getLocation(), "'" << expr.getIdentifier() << "' is not a variable");
         case DeclKind::EnumCase:
-            return llvm::cast<EnumCase>(decl).getType();
+            return llvm::cast<EnumCase>(decl)->getType();
         case DeclKind::FieldDecl:
-            return llvm::cast<FieldDecl>(decl).getType();
+            return llvm::cast<FieldDecl>(decl)->getType();
         case DeclKind::ImportDecl:
             llvm_unreachable("import statement validation not implemented yet");
     }
@@ -116,10 +117,10 @@ Type typecheckIntLiteralExpr(IntLiteralExpr& expr) {
     if (expr.getValue().isSignedIntN(32)) {
         return Type::getInt();
     }
-    if (expr.getValue().isSignedIntN(64)) {
-        return Type::getInt64();
+    if (!expr.getValue().isSignedIntN(64)) {
+        ERROR(expr.getLocation(), "integer literal is too large");
     }
-    ERROR(expr.getLocation(), "integer literal is too large");
+    return Type::getInt64();
 }
 
 Type typecheckFloatLiteralExpr(FloatLiteralExpr&) {
@@ -975,6 +976,7 @@ Decl* Typechecker::resolveOverload(llvm::ArrayRef<Decl*> decls, CallExpr& expr, 
             return matches.front();
 
         case 0: {
+            // FIXME: Should returnNullOnError be renamed to reportErrors or removed completely?
             if (returnNullOnError) {
                 return nullptr;
             }
@@ -999,6 +1001,8 @@ Decl* Typechecker::resolveOverload(llvm::ArrayRef<Decl*> decls, CallExpr& expr, 
             } else {
                 ERROR(expr.getCallee().getLocation(), "'" << callee << "' is not a function");
             }
+
+            return nullptr;
         }
         default:
             if (returnNullOnError) {
@@ -1023,6 +1027,7 @@ Decl* Typechecker::resolveOverload(llvm::ArrayRef<Decl*> decls, CallExpr& expr, 
 
             ERROR_WITH_NOTES(expr.getCallee().getLocation(), getCandidateNotes(decls),
                              "ambiguous reference to '" << callee << (isInitCall ? ".init'" : "'"));
+            return matches.front();
     }
 }
 
@@ -1113,8 +1118,8 @@ Type Typechecker::typecheckCallExpr(CallExpr& expr) {
         if (auto* initDecl = llvm::dyn_cast<InitDecl>(decl)) {
             expr.setReceiverType(initDecl->getTypeDecl()->getType());
         } else if (decl->isMethodDecl()) {
-            auto& varDecl = llvm::cast<VarDecl>(findDecl("this", expr.getCallee().getLocation()));
-            expr.setReceiverType(varDecl.getType());
+            auto* varDecl = llvm::cast<VarDecl>(findDecl("this", expr.getCallee().getLocation()));
+            expr.setReceiverType(varDecl->getType());
         }
     }
 
@@ -1310,11 +1315,11 @@ Type Typechecker::typecheckBuiltinCast(CallExpr& expr) {
     Type sourceType = typecheckExpr(*expr.getArgs().front().getValue());
     Type targetType = expr.getGenericArgs().front();
 
-    if (isValidCast(sourceType, targetType)) {
-        return targetType;
+    if (!isValidCast(sourceType, targetType)) {
+        ERROR(expr.getCallee().getLocation(), "illegal cast from '" << sourceType << "' to '" << targetType << "'");
     }
 
-    ERROR(expr.getCallee().getLocation(), "illegal cast from '" << sourceType << "' to '" << targetType << "'");
+    return targetType;
 }
 
 Type Typechecker::typecheckSizeofExpr(SizeofExpr&) {
@@ -1375,6 +1380,7 @@ Type Typechecker::typecheckMemberExpr(MemberExpr& expr) {
     }
 
     ERROR(expr.getLocation(), "no member named '" << expr.getMemberName() << "' in '" << baseType << "'");
+    return Type();
 }
 
 Type Typechecker::typecheckSubscriptExpr(SubscriptExpr& expr) {
@@ -1434,12 +1440,13 @@ Type Typechecker::typecheckIfExpr(IfExpr& expr) {
     auto thenType = typecheckExpr(*expr.getThenExpr());
     auto elseType = typecheckExpr(*expr.getElseExpr());
 
-    if (convert(expr.getThenExpr(), elseType)) {
-        return elseType;
-    } else if (convert(expr.getElseExpr(), thenType)) {
+    if (convert(expr.getElseExpr(), thenType)) {
         return thenType;
+    } else if (convert(expr.getThenExpr(), elseType)) {
+        return elseType;
     } else {
         ERROR(expr.getLocation(), "incompatible operand types ('" << thenType << "' and '" << elseType << "')");
+        return thenType;
     }
 }
 

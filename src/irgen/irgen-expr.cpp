@@ -397,7 +397,7 @@ llvm::Value* IRGenerator::codegenBuiltinConversion(const Expr& expr, Type type) 
         if (expr.getType().isUnsignedInteger()) return builder.CreateUIToFP(value, toIR(type));
     }
 
-    ERROR(expr.getLocation(), "conversion from '" << expr.getType() << "' to '" << type << "' not supported");
+    FATAL_ERROR(expr.getLocation(), "conversion from '" << expr.getType() << "' to '" << type << "' not supported");
 }
 
 void IRGenerator::codegenAssert(llvm::Value* condition, SourceLocation location, llvm::StringRef message) {

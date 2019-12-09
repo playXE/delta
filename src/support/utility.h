@@ -87,18 +87,6 @@ struct Note {
     std::string message;
 };
 
-class CompileError {
-public:
-    CompileError(SourceLocation location, std::string&& message, std::vector<Note>&& notes)
-    : location(location), message(std::move(message)), notes(std::move(notes)) {}
-    void print() const;
-
-private:
-    SourceLocation location;
-    std::string message;
-    std::vector<Note> notes;
-};
-
 template<typename T>
 void printColored(const T& text, llvm::raw_ostream::Colors color) {
     if (llvm::outs().has_colors()) llvm::outs().changeColor(color, true);
@@ -107,8 +95,9 @@ void printColored(const T& text, llvm::raw_ostream::Colors color) {
 }
 
 [[noreturn]] void abort(StringFormatter& message);
-[[noreturn]] void errorWithNotes(SourceLocation location, std::vector<Note>&& notes, StringFormatter& message);
-[[noreturn]] void error(SourceLocation location, StringFormatter& message);
+[[noreturn]] void fatalError(SourceLocation location, StringFormatter& message);
+void errorWithNotes(SourceLocation location, std::vector<Note>&& notes, StringFormatter& message);
+void error(SourceLocation location, StringFormatter& message);
 void warn(SourceLocation location, StringFormatter& message);
 
 enum class WarningMode { Default, Suppress, TreatAsErrors };
@@ -118,6 +107,13 @@ enum class WarningMode { Default, Suppress, TreatAsErrors };
         StringFormatter s; \
         s << args; \
         abort(s); \
+    }
+
+#define FATAL_ERROR(location, args) \
+    { \
+        StringFormatter s; \
+        s << args; \
+        fatalError(location, s); \
     }
 
 #define ERROR_WITH_NOTES(location, notes, args) \

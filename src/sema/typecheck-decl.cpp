@@ -74,8 +74,8 @@ void Typechecker::typecheckType(Type type, AccessLevel userAccessLevel) {
             if (type.getPointee().isArrayWithRuntimeSize()) {
                 auto qualifiedTypeName = getQualifiedTypeName("ArrayRef", type.getPointee().getElementType());
                 if (findDecls(qualifiedTypeName).empty()) {
-                    auto& arrayRef = llvm::cast<TypeTemplate>(findDecl("ArrayRef", SourceLocation()));
-                    auto* instantiation = arrayRef.instantiate({ type.getPointee().getElementType() });
+                    auto* arrayRef = llvm::cast<TypeTemplate>(findDecl("ArrayRef", SourceLocation()));
+                    auto* instantiation = arrayRef->instantiate({ type.getPointee().getElementType() });
                     getCurrentModule()->addToSymbolTable(*instantiation);
                     declsToTypecheck.push_back(instantiation);
                 }

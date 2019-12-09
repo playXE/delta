@@ -99,7 +99,7 @@ private:
     TupleExpr* parseTupleLiteral();
     std::vector<Type> parseNonEmptyTypeList();
     std::vector<Type> parseGenericArgumentList();
-    int64_t parseArraySizeInBrackets();
+    llvm::Optional<int64_t> parseArraySizeInBrackets();
     Type parseSimpleType(Mutability mutability);
     Type parseTupleType();
     Type parseFunctionType(Type returnType);
@@ -158,7 +158,7 @@ private:
     TypeTemplate* parseTypeTemplate(AccessLevel accessLevel);
     Token parseTypeHeader(std::vector<Type>& interfaces, std::vector<GenericParamDecl>* genericParams);
     TypeDecl* parseTypeDecl(std::vector<GenericParamDecl>* genericParams, AccessLevel typeAccessLevel);
-    EnumDecl* parseEnumDecl(std::vector<GenericParamDecl>* genericParams, AccessLevel typeAccessLevel);
+    EnumDecl* parseEnumDecl(AccessLevel typeAccessLevel);
     ImportDecl* parseImportDecl();
     void parseIfdefBody(std::vector<Decl*>* activeDecls);
     void parseIfdef(std::vector<Decl*>* activeDecls);

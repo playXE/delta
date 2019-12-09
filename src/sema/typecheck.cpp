@@ -404,48 +404,47 @@ static llvm::SmallVector<Decl*, 1> findDeclsInModules(llvm::StringRef name, llvm
 static Decl* findDeclInModules(llvm::StringRef name, SourceLocation location, llvm::ArrayRef<Module*> modules) {
     auto decls = findDeclsInModules(name, modules);
 
-    switch (decls.size()) {
-        case 1:
-            return decls[0];
-        case 0:
-            return nullptr;
-        default:
-            ERROR(location, "ambiguous reference to '" << name << "'");
+    if (decls.empty()) {
+        return nullptr;
+    } else {
+        if (decls.size() > 1) ERROR(location, "ambiguous reference to '" << name << "'");
+        return decls[0];
     }
 }
 
-Decl& Typechecker::findDecl(llvm::StringRef name, SourceLocation location) const {
+Decl* Typechecker::findDecl(llvm::StringRef name, SourceLocation location) const {
     ASSERT(!name.empty());
 
     if (Decl* match = findDeclInModules(name, location, currentModule)) {
-        return *match;
+        return match;
     }
 
     if (currentFunction) {
         if (auto* typeDecl = currentFunction->getTypeDecl()) {
             for (auto& field : typeDecl->getFields()) {
                 if (field.getName() == name) {
-                    return field;
+                    return &field;
                 }
             }
         }
     }
 
     if (Decl* match = findDeclInModules(name, location, currentModule->getStdlibModules())) {
-        return *match;
+        return match;
     }
 
     if (currentSourceFile) {
         if (Decl* match = findDeclInModules(name, location, currentSourceFile->getImportedModules())) {
-            return *match;
+            return match;
         }
     } else {
         if (Decl* match = findDeclInModules(name, location, currentModule->getAllImportedModules())) {
-            return *match;
+            return match;
         }
     }
 
     ERROR(location, "unknown identifier '" << name << "'");
+    return nullptr;
 }
 
 std::vector<Decl*> Typechecker::findDecls(llvm::StringRef name, TypeDecl* receiverTypeDecl, bool inAllImportedModules) const {

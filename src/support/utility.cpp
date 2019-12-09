@@ -69,16 +69,6 @@ void delta::printDiagnostic(SourceLocation location, llvm::StringRef type, llvm:
     llvm::outs() << '\n';
 }
 
-void CompileError::print() const {
-    printDiagnostic(location, "error", llvm::raw_ostream::RED, message);
-
-    for (auto& note : notes) {
-        printDiagnostic(note.location, "note", llvm::raw_ostream::BLACK, note.message);
-    }
-
-    llvm::outs().flush();
-}
-
 std::string delta::getCCompilerPath() {
 #ifdef _WIN32
     auto compilers = { "cl.exe", "clang-cl.exe" };
@@ -99,12 +89,21 @@ void delta::abort(StringFormatter& message) {
     exit(1);
 }
 
+void delta::fatalError(SourceLocation location, StringFormatter& message) {
+    error(location, message);
+    exit(1);
+}
+
 void delta::errorWithNotes(SourceLocation location, std::vector<Note>&& notes, StringFormatter& message) {
-    throw CompileError(location, std::move(message.str()), std::move(notes));
+    printDiagnostic(location, "error", llvm::raw_ostream::RED, message.str());
+
+    for (auto& note : notes) {
+        printDiagnostic(note.location, "note", llvm::raw_ostream::BLACK, note.message);
+    }
 }
 
 void delta::error(SourceLocation location, StringFormatter& message) {
-    throw CompileError(location, std::move(message.str()), std::vector<Note>());
+    printDiagnostic(location, "error", llvm::raw_ostream::RED, message.str());
 }
 
 void delta::warn(SourceLocation location, StringFormatter& message) {
